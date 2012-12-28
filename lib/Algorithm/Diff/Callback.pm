@@ -1,79 +1,58 @@
 package Algorithm::Diff::Callback;
+{
+  $Algorithm::Diff::Callback::VERSION = '0.100';
+}
+# ABSTRACT: Use callbacks on computed differences
 
 use strict;
 use warnings;
 
 use Carp;
-use Exporter        'import';
+use parent          'Exporter';
 use List::MoreUtils 'uniq';
 use Algorithm::Diff 'diff';
 
-our $VERSION   = '0.03';
 our @EXPORT_OK = qw(diff_hashes diff_arrays);
 
 sub diff_hashes {
-    my ( $old, $new, $del_cb, $add_cb, $changed_cb ) = @_;
-    my @changed = ();
+    my ( $old, $new, %cbs ) = @_;
 
-    # check old and new hashes
     ref $old eq 'HASH' or croak 'Arg 1 must be hashref';
     ref $new eq 'HASH' or croak 'Arg 2 must be hashref';
 
-    # check callbacks
-    {
-        my $count = 3;
-        foreach ( $del_cb, $add_cb, $changed_cb ) {
-            if ( defined $_ ) {
-                ref $_ eq 'CODE' or croak "Arg $count must be coderef or undef";
-            }
-
-            $count++;
-        }
-    }
-
-    # start doing the work
-    foreach my $cell ( keys %{$new} ) {
-        if ( ! exists $old->{$cell} ) {
-            $add_cb and $add_cb->( $cell, $new->{$cell} );
+    my @changed = ();
+    foreach my $key ( keys %{$new} ) {
+        if ( ! exists $old->{$key} ) {
+            exists $cbs{'added'}
+                and $cbs{'added'}->( $key, $new->{$key} );
         } else {
-            push @changed, $cell;
+            push @changed, $key;
         }
     }
 
-    foreach my $cell ( keys %{$old} ) {
-        if ( ! exists $new->{$cell} ) {
-            $del_cb and $del_cb->( $cell, $old->{$cell} );
+    foreach my $key ( keys %{$old} ) {
+        if ( ! exists $new->{$key} ) {
+            exists $cbs{'deleted'}
+                and $cbs{'deleted'}->( $key, $old->{$key} );
         }
     }
 
-    foreach my $changed (@changed) {
-        my $before = $old->{$changed} || '';
-        my $after  = $new->{$changed} || '';
+    foreach my $key (@changed) {
+        my $before = $old->{$key} || '';
+        my $after  = $new->{$key} || '';
 
         if ( $before ne $after ) {
-            $changed_cb and $changed_cb->( $changed, $before, $after );
+            exists $cbs{'changed'}
+                and $cbs{'changed'}->( $key, $before, $after );
         }
     }
 }
 
 sub diff_arrays {
-    my ( $old, $new, $del_cb, $add_cb ) = @_;
+    my ( $old, $new, %cbs ) = @_;
 
-    # check old and new hashes
     ref $old eq 'ARRAY' or croak 'Arg 1 must be arrayref';
     ref $new eq 'ARRAY' or croak 'Arg 2 must be arrayref';
-
-    # check callbacks
-    {
-        my $count = 3;
-        foreach ( $del_cb, $add_cb ) {
-            if ( defined $_ ) {
-                ref $_ eq 'CODE' or croak "Arg $count must be coderef or undef";
-            }
-
-            $count++;
-        }
-    }
 
     # normalize arrays
     my @old = uniq sort @{$old};
@@ -86,9 +65,9 @@ sub diff_arrays {
             my ( $change, undef, $value ) = @{$changeset};
 
             if ( $change eq '+' ) {
-                $add_cb and $add_cb->($value);
+                exists $cbs{'added'} and $cbs{'added'}->($value);
             } elsif ( $change eq '-' ) {
-                $del_cb and $del_cb->($value);
+                exists $cbs{'deleted'} and $cbs{'deleted'}->($value);
             } else {
                 croak "Can't recognize change in changeset: '$change'";
             }
@@ -100,13 +79,15 @@ sub diff_arrays {
 
 __END__
 
+=pod
+
 =head1 NAME
 
 Algorithm::Diff::Callback - Use callbacks on computed differences
 
 =head1 VERSION
 
-Version 0.03
+version 0.100
 
 =head1 SYNOPSIS
 
@@ -117,8 +98,8 @@ Use callbacks in your diff process to get better control over what will happen.
     diff_arrays(
         \@old_family_members,
         \@new_family_members,
-        sub { print 'Happy to hear about ', shift },
-        sub { print 'Sorry to hear about ', shift },
+        added   => sub { say 'Happy to hear about ', shift },
+        deleted => sub { say 'Sorry to hear about ', shift },
     );
 
 Or using hashes:
@@ -128,13 +109,15 @@ Or using hashes:
     diff_hashes(
         \%old_details,
         \%new_details,
-        sub { print 'Lost ',   shift },
-        sub { print 'Gained ', shift },
-        sub {
+        added   => sub { say 'Gained ', shift },
+        deleted => sub { say 'Lost ',   shift },
+        changed => sub {
             my ( $key, $before, $after ) = @_;
-            print "$key changed from $before to $after\n";
+            say "$key changed from $before to $after";
         },
     );
+
+=head1 DESCRIPTION
 
 One of the difficulties when using diff modules is that they assume they know
 what you want the information for. Some give you formatted output, some give you
@@ -142,66 +125,92 @@ just the values that changes (but neglect to mention how each changed) and some
 (such as L<Algorithm::Diff>) give you way too much information that you now have
 to skim over and write long complex loops for.
 
-L<Algorithm::Diff::Callback> let's you pick what you're going to diff (Arrays,
+L<Algorithm::Diff::Callback> let's you pick what you're going to diff (Arrays or
 Hashes) and set callbacks for the diff process.
 
 =head1 EXPORT
+
+You'll need to declare to explicitly export these functions.
 
 =head2 diff_arrays
 
 =head2 diff_hashes
 
+    use Algorithm::Diff::Callback qw<diff_arrays diff_hashes>;
+
 =head1 SUBROUTINES/METHODS
 
-=head2 diff_arrays(\@old, \@new, \&removed, \&added)
+=head2 diff_arrays(\@old, \@new, %callbacks)
 
 The first two parameters are array references to compare.
 
-The second two parameters are subroutine references which will be called and
-given the value that was either removed or added during the diff process.
+The rest of the parameters are keys for the type of callback you want and the
+corresponding callback. You can provide multiple callbacks. Supported keys are:
 
-The comparison is explicitly the second one B<against> the first one.
+=over 4
 
-That means that if you give a I<removed> subroutine, it really means that a
-value that existed in the first arrayref does not exist in the second arrayref.
+=item * added
 
-If you gave a I<added> subroutine, it really means that a value that did B<not>
-exist in the first arrayref now exists in the second one.
+    diff_arrays(
+        \@old, \@new,
+        added => sub {
+            my $value = shift;
+            say "$value was added to the array";
+        }
+    );
 
-B<Note:> if you do not wish to give a certain subroutine, you can simply provide
-undef:
+=item * deleted
 
-    diff_arrays( \@old, \@new, undef, sub { 'added: ', $_[0], "\n" } );
+    diff_arrays(
+        \@old, \@new,
+        deleted => sub {
+            my $value = shift;
+            say "$value was deleted from the array";
+        }
+    );
 
-=head2 diff_hashes(\%old, \%new, \&removed, \&added, \&change)
+=back
+
+=head2 diff_hashes(\%old, \%new, %callbacks)
 
 The first two parameters are hash references to compare.
 
-The second two paramters are the subroutine references which will be called and
-given the key and value that was either removed or added during the diff
-process.
+The rest of the parameters are keys for the type of callback you want and the
+corresponding callback. You can provide multiple callbacks. Supported keys are:
 
-The third parameter is a subroutine reference of information that changed
-between the first and second hashes. It will be given the key that was changed,
-the value it had before and the value it now has in the new reference.
+=over 4
 
-B<Note:> if you do not wish to give a certain subroutine, you can simply provide
-undef:
+=item * added
 
     diff_hashes(
-        \%old,
-        \%new,
-        undef,
-        undef,
-        sub {
-            my ( $key, $before, $after ) = @_;
-            print "$key changed from $before to $after\n";
-        },
+        \%old, \%new,
+        added => sub {
+            my ( $key, $value ) = @_;
+            say "$key ($value) was added to the hash";
+        }
     );
 
-=head1 AUTHOR
+=item * deleted
 
-Sawyer X, C<< <xsawyerx at cpan.org> >>
+    diff_hashes(
+        \%old, \%new,
+        deleted => sub {
+            my ( $key, $value ) = @_;
+            say "$key ($value) was deleted from the hash";
+        }
+    );
+
+=item * changed
+
+    diff_hashes(
+        \%old, \%new,
+        changed => sub {
+            my ( $key, $before, $after ) = @_;
+            say "$key in the hash was changed from $before to $after";
+        }
+    );
+
+=back
 
 =head1 BUGS
 
@@ -252,13 +261,15 @@ L<Carp>
 
 L<Exporter>
 
-=head1 LICENSE AND COPYRIGHT
+=head1 AUTHOR
 
-Copyright 2010 Sawyer X.
+Sawyer X <xsawyerx@cpan.org>
 
-This program is free software; you can redistribute it and/or modify it
-under the terms of either: the GNU General Public License as published
-by the Free Software Foundation; or the Artistic License.
+=head1 COPYRIGHT AND LICENSE
 
-See http://dev.perl.org/licenses/ for more information.
+This software is copyright (c) 2012 by Sawyer X.
 
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

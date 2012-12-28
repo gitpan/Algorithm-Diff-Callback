@@ -3,24 +3,32 @@ abstract: 'Use callbacks on computed differences'
 author:
   - 'Sawyer X <xsawyerx@cpan.org>'
 build_requires:
+  File::Find: 0
+  File::Temp: 0
+  Module::Build: 0.3601
   Test::More: 0
 configure_requires:
-  Module::Build: 0.36
-generated_by: 'Module::Build version 0.3607'
+  ExtUtils::MakeMaker: 6.30
+  Module::Build: 0.3601
+dynamic_config: 0
+generated_by: 'Dist::Zilla version 4.300028, CPAN::Meta::Converter version 2.120921'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
 name: Algorithm-Diff-Callback
-provides:
-  Algorithm::Diff::Callback:
-    file: lib/Algorithm/Diff/Callback.pm
-    version: 0.03
+no_index:
+  file:
+    - README.pod
 requires:
   Algorithm::Diff: 0
   Carp: 0
   Exporter: 0
   List::MoreUtils: 0
+  parent: 0
+  strict: 0
+  warnings: 0
 resources:
-  license: http://dev.perl.org/licenses/
-version: 0.03
+  bugtracker: http://github.com/xsawyerx/algorithm-diff-callback/issues
+  repository: http://github.com/xsawyerx/algorithm-diff-callback
+version: 0.100

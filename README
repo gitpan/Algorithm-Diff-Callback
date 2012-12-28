@@ -2,7 +2,7 @@ NAME
     Algorithm::Diff::Callback - Use callbacks on computed differences
 
 VERSION
-    Version 0.03
+    version 0.100
 
 SYNOPSIS
     Use callbacks in your diff process to get better control over what will
@@ -13,8 +13,8 @@ SYNOPSIS
         diff_arrays(
             \@old_family_members,
             \@new_family_members,
-            sub { print 'Happy to hear about ', shift },
-            sub { print 'Sorry to hear about ', shift },
+            added   => sub { say 'Happy to hear about ', shift },
+            deleted => sub { say 'Sorry to hear about ', shift },
         );
 
     Or using hashes:
@@ -24,14 +24,15 @@ SYNOPSIS
         diff_hashes(
             \%old_details,
             \%new_details,
-            sub { print 'Lost ',   shift },
-            sub { print 'Gained ', shift },
-            sub {
+            added   => sub { say 'Gained ', shift },
+            deleted => sub { say 'Lost ',   shift },
+            changed => sub {
                 my ( $key, $before, $after ) = @_;
-                print "$key changed from $before to $after\n";
+                say "$key changed from $before to $after";
             },
         );
 
+DESCRIPTION
     One of the difficulties when using diff modules is that they assume they
     know what you want the information for. Some give you formatted output,
     some give you just the values that changes (but neglect to mention how
@@ -40,61 +41,79 @@ SYNOPSIS
     for.
 
     Algorithm::Diff::Callback let's you pick what you're going to diff
-    (Arrays, Hashes) and set callbacks for the diff process.
+    (Arrays or Hashes) and set callbacks for the diff process.
 
 EXPORT
+    You'll need to declare to explicitly export these functions.
+
   diff_arrays
   diff_hashes
+        use Algorithm::Diff::Callback qw<diff_arrays diff_hashes>;
+
 SUBROUTINES/METHODS
-  diff_arrays(\@old, \@new, \&removed, \&added)
+  diff_arrays(\@old, \@new, %callbacks)
     The first two parameters are array references to compare.
 
-    The second two parameters are subroutine references which will be called
-    and given the value that was either removed or added during the diff
-    process.
+    The rest of the parameters are keys for the type of callback you want
+    and the corresponding callback. You can provide multiple callbacks.
+    Supported keys are:
 
-    The comparison is explicitly the second one against the first one.
+    *   added
 
-    That means that if you give a *removed* subroutine, it really means that
-    a value that existed in the first arrayref does not exist in the second
-    arrayref.
+            diff_arrays(
+                \@old, \@new,
+                added => sub {
+                    my $value = shift;
+                    say "$value was added to the array";
+                }
+            );
 
-    If you gave a *added* subroutine, it really means that a value that did
-    not exist in the first arrayref now exists in the second one.
+    *   deleted
 
-    Note: if you do not wish to give a certain subroutine, you can simply
-    provide undef:
+            diff_arrays(
+                \@old, \@new,
+                deleted => sub {
+                    my $value = shift;
+                    say "$value was deleted from the array";
+                }
+            );
 
-        diff_arrays( \@old, \@new, undef, sub { 'added: ', $_[0], "\n" } );
-
-  diff_hashes(\%old, \%new, \&removed, \&added, \&change)
+  diff_hashes(\%old, \%new, %callbacks)
     The first two parameters are hash references to compare.
 
-    The second two paramters are the subroutine references which will be
-    called and given the key and value that was either removed or added
-    during the diff process.
+    The rest of the parameters are keys for the type of callback you want
+    and the corresponding callback. You can provide multiple callbacks.
+    Supported keys are:
 
-    The third parameter is a subroutine reference of information that
-    changed between the first and second hashes. It will be given the key
-    that was changed, the value it had before and the value it now has in
-    the new reference.
+    *   added
 
-    Note: if you do not wish to give a certain subroutine, you can simply
-    provide undef:
+            diff_hashes(
+                \%old, \%new,
+                added => sub {
+                    my ( $key, $value ) = @_;
+                    say "$key ($value) was added to the hash";
+                }
+            );
 
-        diff_hashes(
-            \%old,
-            \%new,
-            undef,
-            undef,
-            sub {
-                my ( $key, $before, $after ) = @_;
-                print "$key changed from $before to $after\n";
-            },
-        );
+    *   deleted
 
-AUTHOR
-    Sawyer X, "<xsawyerx at cpan.org>"
+            diff_hashes(
+                \%old, \%new,
+                deleted => sub {
+                    my ( $key, $value ) = @_;
+                    say "$key ($value) was deleted from the hash";
+                }
+            );
+
+    *   changed
+
+            diff_hashes(
+                \%old, \%new,
+                changed => sub {
+                    my ( $key, $before, $after ) = @_;
+                    say "$key in the hash was changed from $before to $after";
+                }
+            );
 
 BUGS
     Please report bugs on the Github issues page at
@@ -139,12 +158,12 @@ DEPENDENCIES
 
     Exporter
 
-LICENSE AND COPYRIGHT
-    Copyright 2010 Sawyer X.
+AUTHOR
+    Sawyer X <xsawyerx@cpan.org>
 
-    This program is free software; you can redistribute it and/or modify it
-    under the terms of either: the GNU General Public License as published
-    by the Free Software Foundation; or the Artistic License.
+COPYRIGHT AND LICENSE
+    This software is copyright (c) 2012 by Sawyer X.
 
-    See http://dev.perl.org/licenses/ for more information.
+    This is free software; you can redistribute it and/or modify it under
+    the same terms as the Perl 5 programming language system itself.
 
